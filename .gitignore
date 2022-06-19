@@ -1,6 +1,5 @@
 animated_neurons/LIF_figures/
 animated_neurons/__pycache__/tools.cpython-38.pyc
 animated_neurons/HSD_figures/
-*.mp4
 animated_neurons/.DS_Store
 animated_neurons/.ipynb_checkpoints/
