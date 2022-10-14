@@ -1,9 +1,10 @@
-import os
+import os, cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.animation import FuncAnimation, PillowWriter, writers
 from tqdm.notebook import tqdm
+from moviepy.editor import VideoFileClip, ImageClip, ImageSequenceClip, TextClip, CompositeVideoClip, ColorClip
 
 def norm(X):
     return (X-X.min())/(X.max()-X.min())
@@ -43,7 +44,7 @@ def membrane_potential(aer, simtime, delays, tau, weight):
     V = np.zeros_like(dts)
     for i, dt in enumerate(dts):
         spike_indice = np.where(sorted_times==i)[0]
-        print(spike_indice.size, spike_indice)
+        #print(spike_indice.size, spike_indice)
         if i==0: 
             V[i] = 0
         else:
@@ -68,7 +69,7 @@ def printfigHSD(fig, name, width=1500, height=1000, dpi_exp=100, bbox='tight', p
     #fig.set_size_inches(width/dpi_exp, height/dpi_exp)
     fig.savefig(path+name, dpi=dpi_exp)#, bbox_inches=bbox, transparent=True)
         
-def draw_LIF_figures(noise, stim, aer, simtime, nb_syn, delays, synaptic_weights, nb_frames=200, width=1500, height=1000, dpi_exp=100, print_figures=False):
+def draw_LIF_figures(noise, stim, aer, simtime, nb_syn, delays, synaptic_weights, nb_frames=200, width=1500, height=1000, dpi_exp=100, print_figures=True, write_movie=True, path = 'LIF_figures/'):
     colorz = ['#ff7f0e', '#1f77b4', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', 'lightcoral']
     color_spike_pre = 'black'
     color_spike_post = colorz[1]
@@ -83,6 +84,8 @@ def draw_LIF_figures(noise, stim, aer, simtime, nb_syn, delays, synaptic_weights
     seed_nb = 0
     np.random.seed(seed_nb)
     fig_height, fig_width =  height/dpi_exp, width/dpi_exp
+    fps = 30
+    dpi_exp = 100
 
     linewidth = 1
     bottom = .1
@@ -110,75 +113,83 @@ def draw_LIF_figures(noise, stim, aer, simtime, nb_syn, delays, synaptic_weights
     output_spikes = np.where(shifted_V>=1)[0]
     
     time = 0
+    if write_movie:
+        sequence = []
     for frame in tqdm(range(nb_frames)):
-        fig, ax = plt.subplots(2,1, figsize=(fig_width, fig_height))
-        ax[0].axis('off')
-        output_line = plt.Line2D([raster_plot_time+synapses_max_delays, 1],[.5, .5], linewidth=linewidth, c='k')
-        ax[0].add_artist(output_line)
-        time += frame_interval
-        time_shift = simtime-time
-        shifted_noise = noise-time_shift
-        if stim.size>0:
-            shifted_stim = stim-time_shift
         
-        start_time_window = int(time)
-        present_time = int(time+postsyn_window_size+presyn_window_size)
-        stop_time_window = int(time+postsoma_window_size+postsyn_window_size+presyn_window_size)
-        
-        output_plots = output_spikes[(output_spikes>present_time-postsoma_window_size) & (output_spikes<present_time)]
-        if output_plots.size>0:
-            for out_spik in range(len(output_plots)):
-                position = raster_plot_time+synapses_max_delays+output_plot_time*(present_time-output_plots[out_spik])/postsoma_window_size
-                output_spik = plt.Line2D([position,position],[.5, .5+spik_height], linewidth=linewidth, c=color_spike_out)
-                ax[0].add_artist(output_spik)
-        neuron = Ellipse((raster_plot_time+synapses_max_delays, .5), neuron_width, neuron_width/ratio, color='w', ec=color_neuron, zorder=4)
-        ax[0].add_artist(neuron);
-        for syn in range(nb_syn):
-            presyn_lines = plt.Line2D([0, raster_plot_time],[bottom+syn*h_spacing, bottom+syn*h_spacing], linewidth=linewidth, c=color_synapse)
-            ax[0].add_artist(presyn_lines)
-            synapses_lines = plt.Line2D([raster_plot_time, raster_plot_time+synapses_max_delays],[bottom+syn*h_spacing, .5], linewidth=linewidth, c=color_synapse)
-            ax[0].add_artist(synapses_lines)
-            synapses = Ellipse((raster_plot_time, bottom+syn*h_spacing), max_synapse_weight*synaptic_weights[syn], max_synapse_weight*synaptic_weights[syn]/ratio, color=color_synapse, ec=color_synapse, zorder=4)
-            ax[0].add_artist(synapses)
-            for noise_spik in range(len(shifted_noise[syn])):
-                if shifted_noise[syn][noise_spik]>0 and shifted_noise[syn][noise_spik]<presyn_window_size:
-                    presyn_spikes = plt.Line2D([raster_plot_time*shifted_noise[syn][noise_spik]/presyn_window_size, raster_plot_time*shifted_noise[syn][noise_spik]/presyn_window_size],[bottom+syn*h_spacing, bottom+syn*h_spacing+spik_height], linewidth=linewidth, c=color_spike_pre)
-                    ax[0].add_artist(presyn_spikes)
-                elif shifted_noise[syn][noise_spik]>=presyn_window_size and shifted_noise[syn][noise_spik]<presyn_window_size+postsyn_window_size:
-                    x_position = raster_plot_time + synapses_max_delays*(shifted_noise[syn][noise_spik]-presyn_window_size)/postsyn_window_size
-                    a = (.5-(bottom+syn*h_spacing))/synapses_max_delays
-                    y_position = a*x_position + .5 - a*(synapses_max_delays+raster_plot_time)
-                    postsyn_spikes = Ellipse((x_position, y_position), post_spik_width*synaptic_weights[syn], post_spik_width*synaptic_weights[syn]/ratio, color=color_spike_post, ec=color_spike_post, alpha = alpha_spike_post, zorder=4)
-                    ax[0].add_artist(postsyn_spikes)
+        if print_figures:
+            fig, ax = plt.subplots(2,1, figsize=(fig_width, fig_height))
+            ax[0].axis('off')
+            output_line = plt.Line2D([raster_plot_time+synapses_max_delays, 1],[.5, .5], linewidth=linewidth, c='k')
+            ax[0].add_artist(output_line)
+            time += frame_interval
+            time_shift = simtime-time
+            shifted_noise = noise-time_shift
             if stim.size>0:
-                for stim_spik in range(len(shifted_stim[syn])):
-                    if shifted_stim[syn][stim_spik]>0 and shifted_stim[syn][stim_spik]<presyn_window_size:
-                        presyn_spikes_stim = plt.Line2D([raster_plot_time*shifted_stim[syn][stim_spik]/presyn_window_size, raster_plot_time*shifted_stim[syn][stim_spik]/presyn_window_size],[bottom+syn*h_spacing, bottom+syn*h_spacing+spik_height], linewidth=linewidth, c=color_stim)
-                        ax[0].add_artist(presyn_spikes_stim)
-                    elif shifted_stim[syn][stim_spik]>=presyn_window_size and shifted_stim[syn][stim_spik]<presyn_window_size+postsyn_window_size:
-                        x_position = raster_plot_time + synapses_max_delays*(shifted_stim[syn][stim_spik]-presyn_window_size)/postsyn_window_size
+                shifted_stim = stim-time_shift
+
+            start_time_window = int(time)
+            present_time = int(time+postsyn_window_size+presyn_window_size)
+            stop_time_window = int(time+postsoma_window_size+postsyn_window_size+presyn_window_size)
+
+            output_plots = output_spikes[(output_spikes>present_time-postsoma_window_size) & (output_spikes<present_time)]
+            if output_plots.size>0:
+                for out_spik in range(len(output_plots)):
+                    position = raster_plot_time+synapses_max_delays+output_plot_time*(present_time-output_plots[out_spik])/postsoma_window_size
+                    output_spik = plt.Line2D([position,position],[.5, .5+spik_height], linewidth=linewidth, c=color_spike_out)
+                    ax[0].add_artist(output_spik)
+            neuron = Ellipse((raster_plot_time+synapses_max_delays, .5), neuron_width, neuron_width/ratio, color='w', ec=color_neuron, zorder=4)
+            ax[0].add_artist(neuron);
+            for syn in range(nb_syn):
+                presyn_lines = plt.Line2D([0, raster_plot_time],[bottom+syn*h_spacing, bottom+syn*h_spacing], linewidth=linewidth, c=color_synapse)
+                ax[0].add_artist(presyn_lines)
+                synapses_lines = plt.Line2D([raster_plot_time, raster_plot_time+synapses_max_delays],[bottom+syn*h_spacing, .5], linewidth=linewidth, c=color_synapse)
+                ax[0].add_artist(synapses_lines)
+                synapses = Ellipse((raster_plot_time, bottom+syn*h_spacing), max_synapse_weight*synaptic_weights[syn], max_synapse_weight*synaptic_weights[syn]/ratio, color=color_synapse, ec=color_synapse, zorder=4)
+                ax[0].add_artist(synapses)
+                for noise_spik in range(len(shifted_noise[syn])):
+                    if shifted_noise[syn][noise_spik]>0 and shifted_noise[syn][noise_spik]<presyn_window_size:
+                        presyn_spikes = plt.Line2D([raster_plot_time*shifted_noise[syn][noise_spik]/presyn_window_size, raster_plot_time*shifted_noise[syn][noise_spik]/presyn_window_size],[bottom+syn*h_spacing, bottom+syn*h_spacing+spik_height], linewidth=linewidth, c=color_spike_pre)
+                        ax[0].add_artist(presyn_spikes)
+                    elif shifted_noise[syn][noise_spik]>=presyn_window_size and shifted_noise[syn][noise_spik]<presyn_window_size+postsyn_window_size:
+                        x_position = raster_plot_time + synapses_max_delays*(shifted_noise[syn][noise_spik]-presyn_window_size)/postsyn_window_size
                         a = (.5-(bottom+syn*h_spacing))/synapses_max_delays
                         y_position = a*x_position + .5 - a*(synapses_max_delays+raster_plot_time)
-                        postsyn_spikes_stim = Ellipse((x_position, y_position), post_spik_width*synaptic_weights[syn], post_spik_width*synaptic_weights[syn]/ratio, color=color_stim, ec=color_stim, alpha = alpha_spike_post, zorder=4)
-                        ax[0].add_artist(postsyn_spikes_stim)
-        ymax = 1.3
-        ax[1].plot(np.arange(simtime+2*(postsyn_window_size+presyn_window_size)-postsoma_window_size)[start_time_window:present_time], shifted_V[start_time_window:present_time], color=color_V)
-        ax[1].plot(np.arange(simtime+2*(postsyn_window_size+presyn_window_size)-postsoma_window_size)[present_time:stop_time_window], shifted_V[present_time:stop_time_window], color=color_V, alpha=alpha_V_futur)
-        
-        if output_plots.size>0:
-            for V_spik in range(len(output_plots)):
-                ax[1].vlines(output_plots[V_spik], 0, ymax, color = color_spike_out)
-        ax[1].set_xlabel('time', fontsize=16)
-        ax[1].set_ylabel('membrane potential', fontsize=16)
-        ax[1].set_ylim(0,ymax)
-        fig.suptitle('Leaky Integrate and Fire Neuron', fontsize=30)
-        plt.subplots_adjust(left=0.1, bottom=0.1, right=0.95, top=0.9)
-        if print_figures:
-            printfigLIF(fig,f'LIF_{frame}.png', width=width, height=height, dpi_exp=dpi_exp,)
-        else:
+                        postsyn_spikes = Ellipse((x_position, y_position), post_spik_width*synaptic_weights[syn], post_spik_width*synaptic_weights[syn]/ratio, color=color_spike_post, ec=color_spike_post, alpha = alpha_spike_post, zorder=4)
+                        ax[0].add_artist(postsyn_spikes)
+                if stim.size>0:
+                    for stim_spik in range(len(shifted_stim[syn])):
+                        if shifted_stim[syn][stim_spik]>0 and shifted_stim[syn][stim_spik]<presyn_window_size:
+                            presyn_spikes_stim = plt.Line2D([raster_plot_time*shifted_stim[syn][stim_spik]/presyn_window_size, raster_plot_time*shifted_stim[syn][stim_spik]/presyn_window_size],[bottom+syn*h_spacing, bottom+syn*h_spacing+spik_height], linewidth=linewidth, c=color_stim)
+                            ax[0].add_artist(presyn_spikes_stim)
+                        elif shifted_stim[syn][stim_spik]>=presyn_window_size and shifted_stim[syn][stim_spik]<presyn_window_size+postsyn_window_size:
+                            x_position = raster_plot_time + synapses_max_delays*(shifted_stim[syn][stim_spik]-presyn_window_size)/postsyn_window_size
+                            a = (.5-(bottom+syn*h_spacing))/synapses_max_delays
+                            y_position = a*x_position + .5 - a*(synapses_max_delays+raster_plot_time)
+                            postsyn_spikes_stim = Ellipse((x_position, y_position), post_spik_width*synaptic_weights[syn], post_spik_width*synaptic_weights[syn]/ratio, color=color_stim, ec=color_stim, alpha = alpha_spike_post, zorder=4)
+                            ax[0].add_artist(postsyn_spikes_stim)
+            ymax = 1.3
+            ax[1].plot(np.arange(simtime+2*(postsyn_window_size+presyn_window_size)-postsoma_window_size)[start_time_window:present_time], shifted_V[start_time_window:present_time], color=color_V)
+            ax[1].plot(np.arange(simtime+2*(postsyn_window_size+presyn_window_size)-postsoma_window_size)[present_time:stop_time_window], shifted_V[present_time:stop_time_window], color=color_V, alpha=alpha_V_futur)
+
+            if output_plots.size>0:
+                for V_spik in range(len(output_plots)):
+                    ax[1].vlines(output_plots[V_spik], 0, ymax, color = color_spike_out)
+            ax[1].set_xlabel('time', fontsize=16)
+            ax[1].set_ylabel('membrane potential', fontsize=16)
+            ax[1].set_ylim(0,ymax)
+            fig.suptitle('Leaky Integrate and Fire Neuron', fontsize=30)
+            plt.subplots_adjust(left=0.1, bottom=0.1, right=0.95, top=0.9)
+            if print_figures:
+                fig.savefig(path+f'LIF_{frame}.png', dpi=dpi_exp)
             if frame == int(nb_frames/2):
                 plt.show()
-        plt.close()
+            plt.close()
+        if write_movie:
+            sequence.append(path+f'LIF_{frame}.png')
+    if write_movie:
+        print('Making movie animation.mpg - this make take a while')
+        os.system("mencoder 'LIF_figures/*.png' -mf type=png:fps=10 -ovc lavc -lavcopts vcodec=wmv2 -oac copy -o animation.mpg")
         
 def draw_HSD_box_figures(noise, stim, aer, simtime, nb_syn, delays, synaptic_weights, nb_frames=200, width=1500, height=1000, dpi_exp=100, print_figures=False):
     # esthetics
@@ -327,7 +338,6 @@ class Slide:
 
 ################################################################################
 # http://zulko.github.io/moviepy/ref/VideoClip/VideoClip.html
-from moviepy.editor import VideoFileClip, ImageClip, TextClip, CompositeVideoClip, ColorClip
 ################################################################################
 class Deck:
     def __init__(self,
