@@ -3,3 +3,5 @@ animated_neurons/__pycache__/tools.cpython-38.pyc
 animated_neurons/HSD_figures/
 animated_neurons/.DS_Store
 animated_neurons/.ipynb_checkpoints/
+animated_neurons/*.mp4
+*.mp4
