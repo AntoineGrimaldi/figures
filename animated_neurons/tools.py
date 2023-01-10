@@ -2,9 +2,7 @@ import os, cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Rectangle
-from matplotlib.animation import FuncAnimation, PillowWriter, writers
 from tqdm.notebook import tqdm
-from moviepy.editor import VideoFileClip, ImageClip, ImageSequenceClip, TextClip, CompositeVideoClip, ColorClip
 import imageio.v3 as iio
 from IPython.display import Image
 
