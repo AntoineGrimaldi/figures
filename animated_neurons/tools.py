@@ -313,7 +313,7 @@ def draw_HSD_box_figures(noise, stim, aer, simtime, nb_syn, delays, synaptic_wei
             ax[1].set_xlabel('time', fontsize=16)
             ax[1].set_ylabel('membrane potential', fontsize=16)
             ax[1].set_ylim(0,ymax)
-            fig.suptitle('Hetero-Synpatic Delays Neuron', fontsize=30)
+            fig.suptitle('Heterogeneous-Delays Spiking Neuron', fontsize=30)
             fig.savefig(path+f'{name}_{frame}.png', dpi=dpi_exp)
         
         frames = np.stack([iio.imread(f"{path}{name}_{x}.png") for x in range(nb_frames)], axis=0)
