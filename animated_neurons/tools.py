@@ -18,8 +18,9 @@ def cospattern(N_inputs, A, theta, k = 4):
 def linear(N_inputs, A, theta):
     return np.linspace(0,A,N_inputs)
 
-def make_input(nb_syn, noise_density, nb_stim, simtime, patwindow, function=cospattern):
+def make_input(nb_syn, noise_density, nb_stim, simtime, patwindow, function=cospattern, seed=1):
     # draw random gaussian noise spike timings -> shape (nb_syn, nb_ev_noise)
+    np.random.seed(seed)
     noise = (np.random.random((nb_syn, int(noise_density*simtime)))*simtime).astype(int)
     # make time references for stimulus repetition -> pattime
     repet = np.linspace(1,nb_stim+1, nb_stim)*simtime/(nb_stim + 2)
